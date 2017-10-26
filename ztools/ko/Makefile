@@ -6,6 +6,8 @@
 
 #define config
 CONFIG_PROC=ON
+CONFIG_CMD_CACHE=ON
+CONFIG_CMD_SOFTIRQ=OFF
 
 # define module name
 MODULE_NAME=ztools
@@ -18,6 +20,19 @@ EXTRA_CFLAGS += -DCONFIG_PROC
 $(MODULE_NAME)-objs += ztools_proc.o
 endif
 
+ifeq ($(CONFIG_CMD_CACHE) ,ON)
+EXTRA_CFLAGS += -DCONFIG_CMD_CACHE
+$(MODULE_NAME)-objs += cmd_cache.o
+endif
+
+ifeq ($(CONFIG_CMD_SOFTIRQ) ,ON)
+EXTRA_CFLAGS += -DCONFIG_CMD_SOFTIRQ
+$(MODULE_NAME)-objs += cmd_softirq.o
+endif
+
+######################################################
+#rules
+######################################################
 PWD :=$(shell pwd)
 all:
 	@echo "===============Making $(MODULE_NAME).ko=================="

@@ -1,6 +1,7 @@
 #include <linux/ioctl.h>
 #include <asm/uaccess.h>
 #include <linux/fs.h>
+#include <linux/version.h>
 
 #include "ztools.h"
 
@@ -53,10 +54,10 @@ struct file_operations ztools_fops = {
 	.read		  = ztools_read,
 	.write		= ztools_write,
 	.poll		  = NULL,
-#if 1
-	.unlocked_ioctl	= ztools_ioctl,
-#else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0)
 	.ioctl	= ztools_ioctl,
+#else
+	.unlocked_ioctl	= ztools_ioctl,
 #endif
 	.open		  = ztools_open,
 	.release	= ztools_release,

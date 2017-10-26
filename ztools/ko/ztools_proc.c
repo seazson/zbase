@@ -14,24 +14,85 @@
 
 struct proc_dir_entry *ztools_dir = NULL;
 
-static int ztools_write_fun_cmd(struct file *file, const char *buffer, unsigned long count, void *data)
+
+void memread(int argc,char *argv[])
+{
+	unsigned int reg_addr,len,i;
+	reg_addr = simple_strtol(argv[1],NULL,0);
+	len = simple_strtol(argv[2],NULL,0);
+
+	printk("\n****************************\n\n");
+	printk("Read addr[0x%08x],len[%d] : ",reg_addr,len);
+	for(i=0; i<len; i++)
+	{
+		if(i%4 == 0)
+			printk("\n 0x%08x : ",reg_addr+i*4);
+		printk("0x%08x ",z_read32(reg_addr+i*4));
+	}
+	printk("\n\n****************************\n");
+}
+DEFINE_ZTOOLS_CMD(memread, "memread addr len");   
+
+void memwrite(int argc,char *argv[])
+{
+	unsigned int reg_addr,reg_data;
+	reg_addr = simple_strtol(argv[1],NULL,0);
+	reg_data = simple_strtol(argv[2],NULL,0);
+
+	printk("\n****************************\n\n");
+	printk("Write addr[0x%x],data[0x%x] : ",reg_addr,reg_data);
+	z_write32(reg_addr,reg_data);
+	printk("\n\n****************************\n");
+}
+DEFINE_ZTOOLS_CMD(memwrite, "memwrite addr data");   
+
+static void ioremapd(int argc,char *argv[])
+{
+	unsigned int phy_addr,len;
+	unsigned int vir_addr;
+	phy_addr = simple_strtol(argv[1],NULL,0);
+	len = simple_strtol(argv[2],NULL,0);
+
+	printk("\n****************************\n\n");
+	vir_addr = (unsigned int)ioremap(phy_addr,len);
+	printk("mmap faddr[0x%08x],vaddr[0x%08x] : ",phy_addr,vir_addr);
+	printk("\n\n****************************\n");
+}
+DEFINE_ZTOOLS_CMD(ioremapd, "ioremapd addr len");   
+
+#ifdef CONFIG_CMD_SOFTIRQ
+EXTERN_ZTOOLS_CMD(softirq);
+#endif
+
+#ifdef CONFIG_CMD_CACHE
+EXTERN_ZTOOLS_CMD(cache);
+#endif
+
+struct ztools_cmd_t *cmd_g[] = 
+{
+	ZTOOLS_CMD(memread),
+	ZTOOLS_CMD(memwrite),
+	ZTOOLS_CMD(ioremapd),
+#ifdef CONFIG_CMD_SOFTIRQ
+	ZTOOLS_CMD(softirq),
+#endif	
+#ifdef CONFIG_CMD_CACHE
+	ZTOOLS_CMD(cache),
+#endif
+};
+
+static ssize_t ztools_write_fun_cmd(struct file *file, const char *buffer, size_t count, loff_t *offset)
 {
 	int len;
 	int i=0;
 	char p[100];
 	char *argv[30];
+	int argc;
 	
-	unsigned int reg_addr;
-	unsigned int reg_data;
-	unsigned int phy_addr;
-	unsigned int vir_addr;
-
-	
-	data = p;
 	memset(p,0,sizeof(p));
-	if(copy_from_user(data,buffer,count))
+	if(copy_from_user(p,buffer,count))
 		return -EFAULT;
-	printk("cmdline is %s\n",(char *)data);
+	printk("cmdline is %s\n",p);
 
 /*解析命令行*/
 	for(len = 0;len < count;)
@@ -54,48 +115,14 @@ static int ztools_write_fun_cmd(struct file *file, const char *buffer, unsigned 
 	}
 	
 done:
+	argc = i;
 	for(len=0;len<i;len++)
 		printk("%d %s\n",len,argv[len]);
 	
-	if(strncmp("init",argv[0],4) == 0)
+	for(i=0;i<sizeof(cmd_g)/sizeof(struct ztools_cmd_t *);i++)
 	{
-
-	}
-	else if(strncmp("memread",argv[0],7) == 0)
-	{
-		reg_addr = simple_strtol(argv[1],NULL,0);
-		len = simple_strtol(argv[2],NULL,0);
-
-		printk("\n****************************\n\n");
-		printk("Read addr[0x%08x],len[%d] : ",reg_addr,len);
-		for(i=0; i<len; i++)
-		{
-			if(i%4 == 0)
-				printk("\n 0x%08x : ",reg_addr+i*4);
-			printk("0x%08x ",z_read32(reg_addr+i*4));
-		}
-		printk("\n\n****************************\n");
-
-	}
-	else if(strncmp("memwrite",argv[0],8) == 0)
-	{
-		reg_addr = simple_strtol(argv[1],NULL,0);
-		reg_data = simple_strtol(argv[2],NULL,0);
-
-		printk("\n****************************\n\n");
-		printk("Write addr[0x%x],data[0x%x] : ",reg_addr,reg_data);
-		z_write32(reg_addr,reg_data);
-		printk("\n\n****************************\n");
-	}
-	else if(strncmp("ioremap",argv[0],7) == 0)
-	{
-		phy_addr = simple_strtol(argv[1],NULL,0);
-		len = simple_strtol(argv[2],NULL,0);
-
-		printk("\n****************************\n\n");
-		vir_addr = ioremap(phy_addr,len);
-		printk("mmap faddr[0x%08x],vaddr[0x%08x] : ",phy_addr,vir_addr);
-		printk("\n\n****************************\n");
+		if(strncmp(cmd_g[i]->name,argv[0],strlen(cmd_g[i]->name)) == 0)
+			cmd_g[i]->func(argc,argv);
 	}
 	
 	return count;	
@@ -182,12 +209,13 @@ void ztools_proc_free(void)
 
 static int c_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "Ztools help v1.0\n");
-    seq_printf(m, "Usage:\n");
-    seq_printf(m, "\techo cmdline > /proc/ztools/cmd\n");
-    seq_printf(m, "\techo memread addr len\n");
-    seq_printf(m, "\techo memwrite addr data\n");
-    seq_printf(m, "\techo ioremap addr len\n");
+	int i;	
+	seq_printf(m, "Ztools help v1.0\n");
+    seq_printf(m, "Usage:echo xxx > /proc/ztools/cmd %d %d\n",sizeof(cmd_g),sizeof(struct ztools_cmd_t *));
+	for(i=0;i<sizeof(cmd_g)/sizeof(struct ztools_cmd_t *);i++)
+	{
+		seq_printf(m, "\t %s \n",cmd_g[i]->usage);
+	}
 
 	return 0;
 }

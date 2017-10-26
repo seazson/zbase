@@ -29,4 +29,34 @@ int ztools_proc_init(void);
 void ztools_proc_free(void);
 #endif
 
+struct ztools_cmd_t
+{
+	char *name;
+	char *usage;
+	void (*func)(int argc, char *argv[]);
+};
+
+/*	should add section to ld
+	. = ALIGN(8);
+	.ztools.data : {	
+		__ztools_start = .; 
+		*(_ztools_cmd)				
+		__ztools_end = .;
+	}
+	
+*/
+
+#define DEFINE_ZTOOLS_CMD(function, msg)			\
+									\
+struct ztools_cmd_t ztools_##function = {			\
+			.name = #function,			\
+			.usage = msg,		\
+			.func = function,			\
+};									\
+struct ztools_cmd_t 		\
+__attribute__((section("_ztools_cmd"))) *__ztools_##function = &ztools_##function
+
+#define ZTOOLS_CMD(function)  &ztools_##function	
+#define EXTERN_ZTOOLS_CMD(function) extern struct ztools_cmd_t ztools_##function
+	
 #endif
